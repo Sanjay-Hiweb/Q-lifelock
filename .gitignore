@@ -26,6 +26,8 @@ htmlcov/
 .venv/
 venv/
 ENV/
+.scans_cache/
+
 
 # Node / Frontend
 node_modules/

@@ -22,6 +22,9 @@ from core.export.report import ReportGenerator
 from fastapi.responses import Response, PlainTextResponse
 
 from contextlib import asynccontextmanager
+import subprocess
+import re
+import shutil
 
 CURRENT_SCAN: Optional[ScanSummary] = None
 DEFAULT_SYNTHETIC_DIR = Path("tests/fixtures/synthetic_repo").resolve()
@@ -73,19 +76,53 @@ def health_check():
 
 @app.post("/api/scan", response_model=ScanSummary)
 def run_scan(payload: ScanRequest):
-    """Initiate cryptographic inventory scan on a repository."""
+    """Initiate cryptographic inventory scan on a local repository or remote GitHub repository."""
     global CURRENT_SCAN
-    target_path = Path(payload.repository_path).resolve() if payload.repository_path else DEFAULT_SYNTHETIC_DIR
-    if not target_path.exists():
-        raise HTTPException(status_code=400, detail=f"Target directory does not exist: {target_path}")
+    repo_input = (payload.repository_path or "").strip()
 
-    repo_name = payload.repository_name or target_path.name
+    # 1. Handle GitHub / Git Remote Repositories
+    if repo_input.startswith(("http://", "https://", "git@")):
+        match = re.search(r"/([^/]+?)(?:\.git)?$", repo_input)
+        inferred_name = match.group(1) if match else "cloned_repo"
+        repo_name = payload.repository_name or inferred_name
+
+        cache_base = Path(".scans_cache").resolve()
+        cache_base.mkdir(parents=True, exist_ok=True)
+        target_path = cache_base / inferred_name
+
+        if target_path.exists():
+            shutil.rmtree(target_path, ignore_errors=True)
+
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth", "1", repo_input, str(target_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+        except subprocess.CalledProcessError as e:
+            err_msg = e.stderr or e.stdout or "Git clone failed"
+            raise HTTPException(status_code=400, detail=f"Failed to clone Git repository: {err_msg.strip()}")
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=400, detail="Git clone operation timed out after 90 seconds.")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not clone repository: {str(e)}")
+
+    # 2. Handle Local File System Paths
+    else:
+        target_path = Path(repo_input).resolve() if repo_input else DEFAULT_SYNTHETIC_DIR
+        if not target_path.exists():
+            raise HTTPException(status_code=400, detail=f"Target directory does not exist: {target_path}")
+        repo_name = payload.repository_name or target_path.name
+
     CURRENT_SCAN = ScannerEngine.scan_directory(
         target_dir=target_path,
         repository_name=repo_name,
         scenario_year=payload.scenario_year,
     )
     return CURRENT_SCAN
+
 
 
 @app.get("/api/scans/latest", response_model=ScanSummary)

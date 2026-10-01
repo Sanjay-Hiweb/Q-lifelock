@@ -50,7 +50,7 @@ export const ScanModal: React.FC<ScanModalProps> = ({ onClose, onScan }) => {
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <div>
                 <label style={{ fontSize: "0.82rem", fontWeight: 600, display: "block", marginBottom: "0.25rem" }}>
-                  Repository Root Directory:
+                  Repository Source (GitHub URL or Local Path):
                 </label>
                 <input
                   type="text"
@@ -58,12 +58,13 @@ export const ScanModal: React.FC<ScanModalProps> = ({ onClose, onScan }) => {
                   style={{ width: "100%" }}
                   value={repoPath}
                   onChange={(e) => setRepoPath(e.target.value)}
-                  placeholder="e.g. tests/fixtures/synthetic_repo or /path/to/repo"
+                  placeholder="e.g. https://github.com/owner/repo or tests/fixtures/synthetic_repo or D:/project"
                   required
                 />
                 <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                  Relative or absolute path to target source codebase.
+                  Paste a public GitHub repo URL (https://github.com/...) or a local folder path.
                 </span>
+
               </div>
 
               <div>
